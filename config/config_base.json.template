@@ -1,0 +1,7 @@
+{
+	"ssid": "<ssid>",
+	"password": "<pw>",
+	"ifconfig": null,
+	"mqttserver": "mqtt.example.com",
+	"mqttport": 1883
+}
