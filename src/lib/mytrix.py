@@ -16,20 +16,12 @@ import ntptime
 import re
 import urequests
 
-_MYTRIX_MYNIT_SCHEMA = {
-    "homeserver": ("URL of Matrix homeserver", "str", None, "", "from mytrix import _mytrix_mynit_update; _mytrix_mynit_update"),
-    "matrix_id": ("Matrix ID", "str", None, "", "from mytrix import _mytrix_mynit_update; _mytrix_mynit_update"),
-    "password": ("Password", "str", None, "", "from mytrix import _mytrix_mynit_update; _mytrix_mynit_update"),
-    "access_token": ("Access token", "str", None, "", "from mytrix import _mytrix_mynit_update; _mytrix_mynit_update"),
-}
-
-
 class Matrix:
     """Implements Matrix client functionality and state keeping"""
 
     sync_limit = 1
 
-    def __init__(self, homeserver=None, matrix_id=None, access_token=None, txn_id=None):
+    def __init__(self, homeserver=None, matrix_id=None, access_token=None, username=None, password=None, txn_id=None):
         """Configure the Matrix client.
 
         The arguments homeserver, matrix_id and access_token configure access to the Matrix network.
@@ -39,20 +31,16 @@ class Matrix:
         if defaults to the current UNIX timestamp, retrieved by an NTP request. For details on transaction
         IDs, see the Matrix documentation.
         """
-        if "mynit" in locals():
-            mynit = locals()["mynit"]
-            mynit.register("matrix", "Matrix", _MYTRIX_MYNIT_SCHEMA)
+        self.homeserver = homeserver
+        self.matrix_id = matrix_id
+        self.access_token = access_token
 
-            if (homeserver, matrix_id, access_token) != (None, None, None):
-                raise TypeError("No arguments must be passed if mynit is used")
-            self._mynit_update()
-        else:
-            self.homeserver = homeserver
-            self.matrix_id = matrix_id
-            self.access_token = access_token
-
-        if not self.homeserver or not self.matrix_id or not self.access_token:
-            raise TypeError("homeserver, matrix_id and access_token must be set")
+        if not self.homeserver or not self.matrix_id:
+            raise TypeError("homeserver, matrix_id must be set")
+        if not self.access_token:
+            if not username or not password:
+                raise TypeError("if no access_token is given then username and password musst be provided")
+            self.login(username, password)
 
         if txn_id is None:
             self._txn_id = ntptime.time()
@@ -60,15 +48,6 @@ class Matrix:
             self._txn_id = txn_id
 
         self._from_cache = {}
-
-    def _mynit_update(self):
-        mynit = locals()["mynit"]
-        self.homeserver = mynit["matrix"]["homeserver"]
-        self.matrix_id = mynit["matrix"]["matrix_id"]
-        self.access_token = mynit["matrix"]["access_token"]
-
-        if self.matrix_id and mynit["matrix"]["password"] and not self.access_token:
-            self.login(self.matrix_id, mynit["matrix"]["password"])
 
     def _request(self, method, endpoint, query_data=None, json_data=None, unauth=False):
         """Send an HTTP request using urequests."""
@@ -119,12 +98,9 @@ class Matrix:
 
         if "access_token" in data:
             self.access_token = data["access_token"]
+            return True
         else:
             raise RuntimeError("Login failed")
-
-        if "mynit" in locals():
-            mynit = locals()["mynit"]
-            mynit["matrix"]["access_token"] = self.access_token
 
     def send_room_event(self, room, type_, content):
         """Send and arbitrary event to a room."""
@@ -284,11 +260,3 @@ class Matrix:
             return dm_rooms[mxid][0]
 
         return self._create_dm_room(mxid, dm_rooms)
-
-
-_mytrix_instances = []
-
-
-def _mytrix_mynit_update():
-    for i in _mytrix_instances:
-        i._mynit_update()
