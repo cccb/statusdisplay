@@ -1,3 +1,5 @@
+# Based on https://edugit.org/Teckids/hacknfun/libs/mytrix/-/blob/master/mytrix.py
+#
 # Copyright 2020, 2021, 2022 Dominik George <dominik.george@teckids.org>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
