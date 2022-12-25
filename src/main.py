@@ -14,7 +14,8 @@ class RoomStatus():
 class Application():
     def __init__(self):
         self.__running = True
-        self.__status = RoomStatus.UNKNOWN
+        self.__room_status = RoomStatus.UNKNOWN
+        self.__room_status_updated = 0
 
         print('loading config')
         self.config = {}
@@ -22,22 +23,35 @@ class Application():
         self.config.update(json.load(open("config_device.json")))
 
         print('starting setup')
-        self.wifi = self.setup_wifi(self.config['wifi'])
+        self.setup_led_buttons()
+        self.setup_wifi(self.config['wifi'])
         #self.mqtt = self.setup_mqtt(self.config['mqtt'])
-        self.matrix = self.setup_matrix(self.config['matrix'])
+        self.setup_matrix(self.config['matrix'])
         print('setup done')
 
         self.set_room_status(RoomStatus.UNKNOWN, publish=False)
 
+    def setup_led_buttons(self):
+        self.leds = {}
+        self.buttons = {}
+        for status_option in (RoomStatus.PUBLIC_OPEN, RoomStatus.INTERNAL_OPEN, RoomStatus.CLOSED):
+            status_config = self.config_for_status(status_option)
+            self.leds[status_option] = None
+            self.buttons[status_option] = None
+            if status_config.get('led_pin'):
+                self.leds[status_option] = machine.Pin(status_config['led_pin'], machine.Pin.OUT)
+                self.leds[status_option].off()
+            if status_config.get('button_pin'):
+                self.buttons[status_option] = machine.Pin(status_config['button_pin'], machine.Pin.IN, machine.Pin.PULL_UP)
+
     def setup_wifi(self, config):
         from wifi import Wifi
 
-        w = Wifi(config['ssid'], config['password'], config['ifconfig'])
-        if not w.connect():
+        self.wifi = Wifi(config['ssid'], config['password'], config['ifconfig'])
+        if not self.wifi.connect():
             machine.reset()
         # this sleep is needed to fix some init race condition
         time.sleep_ms(300)
-        return w
 
     def setup_mqtt(self, config):
         from mqtt import MQTTClient
@@ -71,7 +85,7 @@ class Application():
         return c
 
     def config_for_status(self, input_status):
-        status_config = self.config['roomstatus']['_default']
+        status_config = self.config['roomstatus']['_default'].copy()
         if input_status == RoomStatus.PUBLIC_OPEN:
             status_config.update(self.config['roomstatus']['public_open'])
         elif input_status == RoomStatus.INTERNAL_OPEN:
@@ -89,49 +103,65 @@ class Application():
         else:
             return self.config['roomstatus']['closed'].get('mqtt_name')
 
+    def translate_status_to_human(self, input_status):
+        status_config = self.config_for_status(input_status)
+        if status_config:
+            return status_config.get('human_name')
+        else:
+            return "Unknown"
+
     def translate_status_from_mqtt(self, input_status):
-        for configsection, result in (
-                ('public_open', RoomStatus.PUBLIC_OPEN),
-                ('private_open', RoomStatus.INTERNAL_OPEN),
-                ('closed', RoomStatus.CLOSED)):
-            status_config = self.config_for_status(configsection)
+        for status_option in (RoomStatus.PUBLIC_OPEN, RoomStatus.INTERNAL_OPEN, RoomStatus.CLOSED):
+            status_config = self.config_for_status(status_option)
             if status_config and status_config.get('mqtt_name') == input_status:
-                return result
+                return status_option
         return RoomStatus.UNKNOWN
 
     def setup_matrix(self, config):
         from mytrix import Matrix
 
-        m = Matrix(
+        self.matrix = Matrix(
                 homeserver=config['homeserver'],
                 matrix_id=config['matrix_id'],
                 access_token=config['access_token'],
                 username=config['username'],
                 password=config['password'])
         if config.get('displayname'):
-            m.set_displayname(config['displayname'])
+            self.matrix.set_displayname(config['displayname'])
         if config.get('rooms'):
             for room in config.get('rooms'):
-                m.join_room(room)
-        return m
+                self.matrix.join_room(room)
 
     def loop(self):
         print('loop started')
         while self.__running:
-            self.__loop_inner()
+            self.check_buttons()
+            time.sleep_ms(50)
 
-    def __loop_inner(self):
-        print('loop')
-        # parse button state
-        time.sleep(1)
+    def check_buttons(self):
+        for status, button in self.buttons.items():
+            if button and button.value() == 0:
+                self.set_room_status(status, publish=True)
+
+    def update_leds(self):
+        for status, led in self.leds.items():
+            if led:
+                led.value(self.__room_status == status)
 
     def set_room_status(self, status, publish=True):
+        if (status == self.__room_status) and not (time.ticks_ms() - self.__room_status_updated) > 2000:
+            return
         status_config = self.config_for_status(status)
-        message = "set room status: " + str(status) + ' ' + str(publish) + '\n'
-        message += "mqtt status: " + self.translate_status_to_mqtt(status)
-        print(message)
-        # turn on correct led
-        # print to correct matrix channel
+        if status_config:
+            message = "set room status: " + self.translate_status_to_human(status) + " mqtt status: " + self.translate_status_to_mqtt(status)
+            print(message)
+            print(status_config)
+            if status_config.get('matrix_rooms'):
+                for room in status_config['matrix_rooms']:
+                    self.matrix.send_room_message(room, message)
+        self.__room_status = status
+        self.__room_status_updated = time.ticks_ms()
+        self.update_leds()
 
 try:
     app = Application()
