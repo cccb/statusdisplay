@@ -1,1 +1,2 @@
-config/config_base.json
+config/*
+!config/*.template
