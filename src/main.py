@@ -134,6 +134,7 @@ class Application():
     def loop(self):
         print('loop started')
         while self.__running:
+            self.mqtt.ping()
             self.mqtt.check_msg()
             self.check_buttons()
             time.sleep_ms(50)
