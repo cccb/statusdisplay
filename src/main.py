@@ -25,7 +25,7 @@ class Application():
         print('starting setup')
         self.setup_led_buttons()
         self.setup_wifi(self.config['wifi'])
-        #self.mqtt = self.setup_mqtt(self.config['mqtt'])
+        self.setup_mqtt(self.config['mqtt'])
         self.setup_matrix(self.config['matrix'])
         print('setup done')
 
@@ -57,32 +57,31 @@ class Application():
         from mqtt import MQTTClient
 
         def mqtt_callback(topic, message):
+            topic = topic.decode()
+            message = message.decode()
             if topic == config.get('statustopic'):
                 parsed_status = self.translate_status_from_mqtt(message)
                 print("status topic detected", parsed_status)
-                self.set_room_status(parsed_status, publish=false)
+                self.set_room_status(parsed_status, publish=False, force_update=True)
             else:
                 print("unknown mqtt message:", topic, message)
 
-        c = MQTTClient('umqtt_'+devname, config['broker'], port=config['brokerport'])
-        c.DEBUG = True
-        c.set_callback(mqtt_callback)
-        if topic == config.get('statustopic'):
-            print("suscribing to mqtt status topic: ", config.get('statustopic'))
-            c.subscribe(config.get('statustopic'))
-
+        self.mqtt = MQTTClient(config['devicename'], server=config['broker'], port=config['brokerport'])
+        self.mqtt.DEBUG = True
+        self.mqtt.set_callback(mqtt_callback)
         time.sleep_ms(300)
-
-        print('trying to setup mqtt')
+        print("connecting to mqtt server at", config['broker'], config['brokerport'])
         while True:
-            if not c.connect():
+            if not self.mqtt.connect():
                 print('new mqtt session being set up')
-                c.subscribe(b'time')
                 break
             else:
                 print('mqtt connection failed, retrying')
                 time.sleep(3)
-        return c
+        statustopic = config.get('statustopic')
+        if statustopic:
+            print("suscribing to mqtt status topic: ", statustopic)
+            self.mqtt.subscribe(statustopic)
 
     def config_for_status(self, input_status):
         status_config = self.config['roomstatus']['_default'].copy()
@@ -135,6 +134,7 @@ class Application():
     def loop(self):
         print('loop started')
         while self.__running:
+            self.mqtt.check_msg()
             self.check_buttons()
             time.sleep_ms(50)
 
@@ -148,20 +148,30 @@ class Application():
             if led:
                 led.value(self.__room_status == status)
 
-    def set_room_status(self, status, publish=True):
-        if (status == self.__room_status) and not (time.ticks_ms() - self.__room_status_updated) > 2000:
-            return
-        status_config = self.config_for_status(status)
-        if status_config:
-            message = "set room status: " + self.translate_status_to_human(status) + " mqtt status: " + self.translate_status_to_mqtt(status)
-            print(message)
-            print(status_config)
-            if status_config.get('matrix_rooms'):
-                for room in status_config['matrix_rooms']:
-                    self.matrix.send_room_message(room, message)
+    def set_room_status(self, status, publish=True, force_update=False):
+        if not force_update:
+            if (status == self.__room_status):
+                return
+            if not (time.ticks_ms() - self.__room_status_updated) > 3000:
+                return
+        print("set status to ", self.translate_status_to_human(status))
         self.__room_status = status
         self.__room_status_updated = time.ticks_ms()
         self.update_leds()
+
+        if not publish:
+            return
+        status_config = self.config_for_status(status)
+        if status_config:
+            message = "Room Status is now " + self.translate_status_to_human(status)
+            if status_config.get('matrix_rooms'):
+                for room in status_config['matrix_rooms']:
+                    print("writing status to matrix:", room)
+                    self.matrix.send_room_message(room, message)
+            statustopic = self.config.get('mqtt', {}).get('statustopic')
+            if statustopic:
+                print("writing status to mqtt:", statustopic)
+                self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
 
 try:
     app = Application()
