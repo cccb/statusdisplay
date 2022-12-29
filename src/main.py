@@ -163,15 +163,15 @@ class Application():
             return
         status_config = self.config_for_status(status)
         if status_config:
+            statustopic = self.config.get('mqtt', {}).get('statustopic')
+            if statustopic:
+                print("writing status to mqtt:", statustopic)
+                self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
             message = "Room Status is now " + self.translate_status_to_human(status)
             if status_config.get('matrix_rooms'):
                 for room in status_config['matrix_rooms']:
                     print("writing status to matrix:", room)
                     self.matrix.send_room_message(room, message)
-            statustopic = self.config.get('mqtt', {}).get('statustopic')
-            if statustopic:
-                print("writing status to mqtt:", statustopic)
-                self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
 
 try:
     app = Application()
