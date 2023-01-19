@@ -54,6 +54,11 @@ class Application():
         time.sleep_ms(300)
 
     def setup_mqtt(self, config):
+        if not config:
+            print("no mqtt config found, skipping mqtt setup")
+            self.mqtt = None
+            return
+
         from mqtt import MQTTClient
 
         def mqtt_callback(topic, message):
@@ -117,6 +122,11 @@ class Application():
         return RoomStatus.UNKNOWN
 
     def setup_matrix(self, config):
+        if not config:
+            print("no matrix config found, skipping matrix setup")
+            self.matrix = None
+            return
+
         from mytrix import Matrix
 
         self.matrix = Matrix(
@@ -134,8 +144,9 @@ class Application():
     def loop(self):
         print('loop started')
         while self.__running:
-            self.mqtt.ping()
-            self.mqtt.check_msg()
+            if self.mqtt:
+                self.mqtt.ping()
+                self.mqtt.check_msg()
             self.check_buttons()
             time.sleep_ms(50)
 
@@ -162,14 +173,16 @@ class Application():
 
         if not publish:
             return
+
         status_config = self.config_for_status(status)
         if status_config:
-            statustopic = self.config.get('mqtt', {}).get('statustopic')
-            if statustopic:
-                print("writing status to mqtt:", statustopic)
-                self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
-            message = "Room Status is now " + self.translate_status_to_human(status)
-            if status_config.get('matrix_rooms'):
+            if self.mqtt:
+                statustopic = self.config('mqtt', {}).get('statustopic')
+                if statustopic:
+                    print("writing status to mqtt:", statustopic)
+                    self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
+            if status_config.get('matrix_rooms') and self.matrix:
+                message = "Room Status is now " + self.translate_status_to_human(status)
                 for room in status_config['matrix_rooms']:
                     print("writing status to matrix:", room)
                     self.matrix.send_room_message(room, message)

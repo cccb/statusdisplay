@@ -1,7 +1,52 @@
 {
-	"ssid": "<ssid>",
-	"password": "<pw>",
-	"ifconfig": null,
-	"mqttserver": "mqtt.example.com",
-	"mqttport": 1883
+	"wifi": {
+		"ssid": null,
+		"password": null,
+		"ifconfig": null
+	},
+	"mqtt": {
+		"broker": "<ip or fqdn>",
+		"brokerport": <port as integer>,
+		"statustopic": "/presence/status",
+		"devicename": "statusdisplay"
+	},
+	"matrix": {
+		"homeserver": "<homeserver url with protocoll>",
+		"matrix_id": "<your id>",
+		"access_token": <either a string or null. if null then username / password musst be set>,
+		"username": "<your username>",
+		"password": "<your password as clear text",
+		"displayname": "<display name to set>",
+		"rooms": [
+			<array or rooms to join>
+		]
+	},
+	"roomstatus": {
+		"_default": {
+			"matrix_rooms": [
+				<array or rooms this status should be announced in>
+			],
+			"mqtt_name": null,
+			"human_name": "Unknown",
+			"led_pin": null,
+			"button_pin": null
+		},
+		"public_open": {
+			"mqtt_name": "public_open",
+			"human_name": "Publicly open, guests welcomed",
+			"led_pin": 8,
+			"button_pin": 9
+		},
+		"internal_open": {
+			"mqtt_name": "internal_open",
+			"human_name": "Open for members and friends",
+			"led_pin": 12,
+			"button_pin": 18
+		},
+		"closed": {
+			"mqtt_name": "closed",
+			"human_name": "Closed",
+			"led_pin": 19,
+			"button_pin": 7
+		}
 }
