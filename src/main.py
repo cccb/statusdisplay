@@ -160,32 +160,40 @@ class Application():
             if led:
                 led.value(self.__room_status == status)
 
-    def set_room_status(self, status, publish=True, force_update=False):
+    def set_room_status(self, new_status, publish=True, force_update=False):
+        old_status = self.__room_status
+
         if not force_update:
-            if (status == self.__room_status):
+            if (new_status == old_status):
                 return
             if not (time.ticks_ms() - self.__room_status_updated) > 3000:
                 return
-        print("set status to ", self.translate_status_to_human(status))
-        self.__room_status = status
+        print("set status to", self.translate_status_to_human(new_status))
+        self.__room_status = new_status
         self.__room_status_updated = time.ticks_ms()
         self.update_leds()
 
         if not publish:
             return
 
-        status_config = self.config_for_status(status)
-        if status_config:
-            if self.mqtt:
-                statustopic = self.config('mqtt', {}).get('statustopic')
-                if statustopic:
-                    print("writing status to mqtt:", statustopic)
-                    self.mqtt.publish(statustopic, self.translate_status_to_mqtt(status), retain=True)
-            if status_config.get('matrix_rooms') and self.matrix:
-                message = "Room Status is now " + self.translate_status_to_human(status)
-                for room in status_config['matrix_rooms']:
-                    print("writing status to matrix:", room)
-                    self.matrix.send_room_message(room, message)
+        if self.mqtt:
+            statustopic = self.config('mqtt', {}).get('statustopic')
+            if statustopic:
+                print("writing status to mqtt:", statustopic)
+                self.mqtt.publish(statustopic, self.translate_status_to_mqtt(new_status), retain=True)
+
+        if new_status == RoomStatus.CLOSED:
+            # The closed status is a special case since we want to announce it to different rooms depending if we were public or private open.
+            # So if that's the case, we use the matrix room setting of the old_status.
+            status_config = self.config_for_status(old_status)
+        else:
+            status_config = self.config_for_status(new_status)
+
+        if status_config and status_config.get('matrix_rooms') and self.matrix:
+            message = "Room Status is now " + self.translate_status_to_human(new_status)
+            for room in status_config['matrix_rooms']:
+                print("writing status to matrix:", room)
+                self.matrix.send_room_message(room, message)
 
 try:
     app = Application()
