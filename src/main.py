@@ -160,6 +160,14 @@ class Application():
             if led:
                 led.value(self.__room_status == status)
 
+    def publish_to_matrix(self, status_config, status_to_send):
+        if not (status_config or status_config.get('matrix_rooms') or self.matrix):
+            return
+        message = "Room Status is now " + self.translate_status_to_human(status_to_send)
+        for room in status_config['matrix_rooms']:
+            print("writing status to matrix:", room)
+            self.matrix.send_room_message(room, message)
+
     def set_room_status(self, new_status, publish=True, force_update=False):
         old_status = self.__room_status
 
@@ -177,7 +185,7 @@ class Application():
             return
 
         if self.mqtt:
-            statustopic = self.config('mqtt', {}).get('statustopic')
+            statustopic = self.config.get('mqtt', {}).get('statustopic')
             if statustopic:
                 print("writing status to mqtt:", statustopic)
                 self.mqtt.publish(statustopic, self.translate_status_to_mqtt(new_status), retain=True)
@@ -186,14 +194,15 @@ class Application():
             # The closed status is a special case since we want to announce it to different rooms depending if we were public or private open.
             # So if that's the case, we use the matrix room setting of the old_status.
             status_config = self.config_for_status(old_status)
+            self.publish_to_matrix(status_config, new_status)
         else:
             status_config = self.config_for_status(new_status)
+            self.publish_to_matrix(self.config_for_status(new_status), new_status)
 
-        if status_config and status_config.get('matrix_rooms') and self.matrix:
-            message = "Room Status is now " + self.translate_status_to_human(new_status)
-            for room in status_config['matrix_rooms']:
-                print("writing status to matrix:", room)
-                self.matrix.send_room_message(room, message)
+        if new_status == RoomStatus.INTERNAL_OPEN and old_status == RoomStatus.PUBLIC_OPEN:
+            # we do not want to leak the fact we are switching to internal open instead of closing, so we
+            # send a closed message to the public channel
+            self.publish_to_matrix(self.config_for_status(RoomStatus.PUBLIC_OPEN), RoomStatus.CLOSED)
 
 try:
     app = Application()
