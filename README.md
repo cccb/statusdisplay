@@ -29,7 +29,7 @@
    ```
 3. Copy code:
    ```shell
-   make program
+   make code
    ```
 
 ---
