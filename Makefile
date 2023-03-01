@@ -4,11 +4,11 @@ IMAGE = images/esp32c3-20220618-v1.19.1.bin
 
 default: help
 
-image:. ## Flash Micropython firmware
+image:  ## Flash Micropython firmware
 	esptool.py --port ${DEVICE} erase_flash
 	esptool.py --chip esp32c3 --port ${DEVICE} --baud 460800 write_flash -z 0x0 ${IMAGE}
 
-code:. ## Flash programm
+code:  ## Flash programm
 	ampy put src/lib/wifi.py wifi.py
 	ampy put src/lib/mqtt.py mqtt.py
 	ampy put src/lib/mytrix.py mytrix.py
