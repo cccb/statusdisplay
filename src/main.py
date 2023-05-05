@@ -189,6 +189,8 @@ class Application():
             if statustopic:
                 print("writing status to mqtt:", statustopic)
                 self.mqtt.publish(statustopic, self.translate_status_to_mqtt(new_status), retain=True)
+                # publish mqtt status to schild
+                self.mqtt.publish('schild/all/api', f"&PL={new_status}", retain=True)
 
         if new_status == RoomStatus.CLOSED:
             # The closed status is a special case since we want to announce it to different rooms depending if we were public or private open.
