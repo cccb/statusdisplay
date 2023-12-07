@@ -27,6 +27,8 @@ class Application():
         self.setup_wifi(self.config['wifi'])
         self.setup_mqtt(self.config['mqtt'])
         self.setup_matrix(self.config['matrix'])
+        self.watchdog = machine.WDT(timeout=10000)
+        self.watchdog.feed()
         print('setup done')
 
         self.set_room_status(RoomStatus.UNKNOWN, publish=False)
@@ -144,6 +146,7 @@ class Application():
     def loop(self):
         print('loop started')
         while self.__running:
+            self.watchdog.feed()
             if self.mqtt:
                 self.mqtt.ping()
                 self.mqtt.check_msg()
